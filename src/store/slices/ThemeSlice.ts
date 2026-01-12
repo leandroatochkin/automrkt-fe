@@ -1,5 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { lightTheme, darkTheme } from "../../lib/theme";
+import { lightTheme, darkTheme, violetTheme } from "../../lib/theme";
 
 interface ThemeState {
     colors: typeof lightTheme.colors;
@@ -8,11 +8,11 @@ interface ThemeState {
     spacing: typeof lightTheme.spacing;
     borderRadius: string;
     boxShadow: string;
-    mode: 'light' | 'dark';
+    mode: 'light' | 'dark' | 'violet';
 }
 
 
-const initialState: ThemeState = {...lightTheme, mode: 'light'};
+const initialState: ThemeState = {...violetTheme, mode: 'violet'};
 
 export const themeSlice = createSlice({
     name: 'theme',

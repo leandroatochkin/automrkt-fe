@@ -24,7 +24,7 @@ export interface GenerateCampaignDTO {
 }
 
 
-interface GenerateCampaignResponse {
+export interface GenerateCampaignResponse {
     id: string
     name: string
     content: string

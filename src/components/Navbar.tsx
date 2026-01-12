@@ -5,6 +5,7 @@ import {
     Tabs,
     Tab
  } from '@mui/material'
+ import {styled} from '@mui/material'
  import type { RootState } from '../store/store'
  import { useSelector } from 'react-redux'
  import { useLocation, useNavigate } from 'react-router-dom'
@@ -31,6 +32,9 @@ function a11yProps(index: number) {
 }
 
 
+
+
+
   return (
     <Box
         sx={{
@@ -41,7 +45,10 @@ function a11yProps(index: number) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            mt: 0
+            position: 'fixed',
+            zIndex: 999,
+            top: 0,
+            left: 0
         }}
         >
           <Box>
@@ -74,9 +81,29 @@ function a11yProps(index: number) {
             :
 
             (
-               <Tabs value={value} onChange={handleTabChange}>
-                    <Tab label='Dashboard' {...a11yProps(0)} />
-                    <Tab label='Campaigns' {...a11yProps(0)} />
+               <Tabs 
+                value={value} 
+                onChange={handleTabChange}
+                role='navigation'
+                textColor='inherit'
+                indicatorColor='secondary' 
+                >
+                    <Tab                         
+                        label='Dashboard' 
+                        {...a11yProps(0)}
+                        component="a"
+                        sx={{
+                            fontWeight: 'bold'
+                        }}
+                        />
+                    <Tab 
+                        label='Campaigns' 
+                        {...a11yProps(1)} 
+                        component="a" 
+                        sx={{
+                            fontWeight: 'bold'
+                        }}
+                        />
                 </Tabs>
             )
           }

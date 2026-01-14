@@ -3,7 +3,7 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react"
 
 interface CampaignData {
     captions: string[]
-    product_name: string
+    product_name?: string
     image_prompts: string[]
     video_prompts: string[]
 }
@@ -24,7 +24,7 @@ export interface GenerateCampaignDTO {
 }
 
 
-export interface GenerateCampaignResponse {
+export interface GenerateCampaignDataObject {
     id: string
     name: string
     content: string
@@ -37,6 +37,30 @@ export interface GenerateCampaignResponse {
     lockedAt: null | string
     ownerId: string
     createdAtstring: string
+    updatedAt: string
+}
+
+export interface GenerateCampaignResponseObject {
+    campaignId: string
+    status: string
+    content: GenerateCampaignDataObject
+}
+
+export interface UpdateCampaignRequestDTO {
+  id: string;
+  payload: {
+    name: string;
+    content: CampaignData;
+    audience: {
+      target: string;
+    };
+  };
+}
+
+export interface UpdateCampaignResponseObject {
+    success: boolean
+    campaignId: string
+    version: number
     updatedAt: string
 }
 
@@ -59,16 +83,24 @@ export const campaignApiSlice = createApi({
     //   },
     }),
     endpoints: (builder) => ({
-      generateCampaign: builder.mutation<GenerateCampaignResponse, GenerateCampaignDTO>({
+      generateCampaign: builder.mutation<GenerateCampaignResponseObject, GenerateCampaignDTO>({
         query: (payload) => ({
           url: `/campaigns/generate`,
           method: "POST",
           body: payload,
         }),
       }),
+      updateCampaign: builder.mutation<UpdateCampaignResponseObject, UpdateCampaignRequestDTO>({
+        query: ({ id, payload }) => ({
+                url: `/campaign/${id}`, // Match your router.patch("/:id") route
+                method: "PATCH",
+                body: payload,
+            }),
+        }),
     }),
   })
   
   export const {
-        useGenerateCampaignMutation
+        useGenerateCampaignMutation,
+        useUpdateCampaignMutation
   } = campaignApiSlice

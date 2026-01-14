@@ -14,7 +14,9 @@ import {
     Divider, 
     Switch, 
     Paper, 
-    Checkbox
+    Checkbox,
+    Chip,
+    CircularProgress
 } from '@mui/material'
 import { 
     CheckCircle, 
@@ -26,7 +28,8 @@ import {
     X, 
     CalendarMonth,
     AccessTime,
-    DoneAll
+    DoneAll,
+    Save as SaveIcon
 } from '@mui/icons-material'
 // MUI Date Pickers
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -34,14 +37,15 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import dayjs, { Dayjs } from 'dayjs';
-
+import { useCampaignMedia } from '../lib/hooks';
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSelector } from 'react-redux'
 import { useForm } from 'react-hook-form'
 import { BarLoader } from 'react-spinners'
 import type { RootState } from '../store/store'
 import { 
-    useGenerateCampaignMutation, 
+    useGenerateCampaignMutation,
+    useUpdateCampaignMutation,
     type GenerateCampaignDTO, 
     type Campaign as CampaignType,
 } from '../api/campaignApi'
@@ -62,9 +66,15 @@ interface EditableContent {
     [key: string]: string[] | object
 }
 
+interface WarningProps {
+    title: string
+    content: string
+}
+
 const Campaign: React.FC<CampaignType> = () => {
     const theme = useSelector((state: RootState) => state.theme)
     const [generateCampaign, { isLoading: isGeneratingCampaign }] = useGenerateCampaignMutation()
+    const [updateCampaign, { isLoading: isUpdatingCampaign }] = useUpdateCampaignMutation();
     
     const campaignRef = useRef<HTMLDivElement>(null);
     const scheduleRef = useRef<HTMLDivElement>(null);
@@ -86,11 +96,15 @@ const Campaign: React.FC<CampaignType> = () => {
     const [launchTime, setLaunchTime] = useState<Dayjs | null>(dayjs())
     const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['Instagram'])
     const [notificationsEnabled, setNotificationsEnabled] = useState(true)
-
+    const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null)
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false)
     const [editableContent, setEditableContent] = useState<EditableContent>({ images: {}, videos: {}, captions: {} });
     const [isEditing, setIsEditing] = useState<{ [key: string]: boolean }>({});
+    const [currentCampaignVersion, setCurrentCampaignVersion] = useState<number>(1)
+//     const { uploadImage, listImages, deleteImage } =
+//   useCampaignMedia(campaignId, user.id);
 
-    const { handleSubmit, register, setValue, reset } = useForm<GenerateCampaignDTO>()
+    const { handleSubmit, register, setValue, reset, getValues } = useForm<GenerateCampaignDTO>()
 
     useEffect(() => {
         if (isApproved && scheduleRef.current) {
@@ -100,6 +114,8 @@ const Campaign: React.FC<CampaignType> = () => {
 
     useEffect(()=>console.log(campaignResult),[campaignResult])
     useEffect(()=>console.log(editableContent),[editableContent])
+    useEffect(()=>console.log(currentCampaignId),[currentCampaignId])
+    useEffect(()=>console.log(hasUnsavedChanges),[hasUnsavedChanges])
 
     // Asset Selection Logic
     const toggleAssetApproval = (promptKey: string, url: string) => {
@@ -123,11 +139,21 @@ const Campaign: React.FC<CampaignType> = () => {
     //     );
     // };
 
+    const hasSelections = Object.values(approvedAssets).some(arr => arr.length > 0) || approvedCaptions.length > 0;
+
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
         const files = e.target.files;
         if (files) {
             const newUrls = Array.from(files).map(file => URL.createObjectURL(file));
+            
+            // 1. Add to the display grid
             setImages(prev => ({ ...prev, [key]: [...(prev[key] || []), ...newUrls] }));
+            
+            // 2. AUTO-APPROVE: Add them directly to selection state
+            setApprovedAssets(prev => ({
+                ...prev,
+                [key]: [...(prev[key] || []), ...newUrls]
+            }));
         }
     };
 
@@ -136,8 +162,9 @@ const Campaign: React.FC<CampaignType> = () => {
         setValue("userId", "1")
         const response = await generateCampaign(data)
         if (response?.data) {
-            const parsed = JSON.parse(response.data.content);
+            const parsed = typeof response.data.content === 'string' ? JSON.parse(response.data.content) : response.data.content;
             setCampaignResult(parsed);
+            setCurrentCampaignId(response.data.campaignId)
             setEditableContent({
                 images: parsed.image_prompts.map((img: GeneratedContent) => img.description),
                 videos: parsed.video_prompts.map((vid: GeneratedContent) => vid.description),
@@ -156,6 +183,7 @@ const Campaign: React.FC<CampaignType> = () => {
     };
 
     const toggleEdit = (key: string) => {
+        setHasUnsavedChanges(true)
         setIsEditing(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
@@ -173,6 +201,29 @@ const Campaign: React.FC<CampaignType> = () => {
         } catch (err) { console.error(err) } finally { setLoadingImg(prev => ({ ...prev, [key]: false })) }
     }
 
+    const handleSaveChanges = async () => {
+        try{
+            const response = await updateCampaign({
+                                id: currentCampaignId ?? '',
+                                payload: {
+                                    name: getValues('product_name'),
+                                    content: {
+                                        image_prompts: editableContent.images as string[],
+                                        video_prompts: editableContent.videos as string[],
+                                        captions: editableContent.captions as string[]
+                                    },
+                                    audience: { target: getValues('target_audience') }
+                                }
+                   })
+            if(response.data){
+                setCurrentCampaignVersion(response.data.version)
+            }
+        console.log(response)
+        } catch(e){
+            console.error(e)
+        }
+    }
+
     const handleReset = () => {
         setCampaignResult(null); setImages({}); setIsApproved(false);
         setApprovedAssets({}); setApprovedCaptions([]);
@@ -185,6 +236,36 @@ const Campaign: React.FC<CampaignType> = () => {
                                 { name: 'Facebook', handle: 'Not connected', icon: <Facebook sx={{ color: '#1877F2' }} /> },
                                 { name: 'X (Twitter)', handle: '@founder_hq', icon: <X sx={{ color: '#000' }} /> }
                             ]
+
+
+    const WarningMsg: React.FC<WarningProps> = (props) => {
+        return (
+            <Box 
+                            sx={{ 
+                                bgcolor: theme.colors.primary, 
+                                border: `1px solid ${theme.colors.border}`, 
+                                p: 2, 
+                                borderRadius: '8px', 
+                                mb: 4, 
+                                display: 'flex', 
+                                gap: 2, 
+                                alignItems: 'center' 
+                                }}>
+                                <WarningAmber sx={{ color: '#F59E0B' }} />
+                                <Box>
+                                    <Typography 
+                                        variant="subtitle2" 
+                                        fontWeight="bold"
+                                        >{props.title}</Typography>
+                                    <Typography 
+                                        variant="caption" 
+                                        color="text.secondary"
+                                        >{props.content}</Typography>
+                                </Box>
+                        </Box>
+
+        )
+    }
 
     return (
         <LocalizationProvider 
@@ -344,6 +425,23 @@ const Campaign: React.FC<CampaignType> = () => {
                                     fontWeight="bold" 
                                     color={theme.colors.text}
                                     >Prompts</Typography>
+                                <Chip 
+                                    color='warning' 
+                                    label={`version: ${currentCampaignVersion}`}
+                                    sx={{
+                                        position: 'absolute',
+                                        top: 2,
+                                        right: 4
+                                    }}
+                                    />
+
+                                {
+                                    hasUnsavedChanges &&
+                                    <WarningMsg 
+                                       title='You have unsaved changes'
+                                       content='Please save your changes before scheduling your campaign.'
+                                       />
+                                }
                                 
                                 {['images', 'videos'].map((sectionKey) => (
                                     <React.Fragment 
@@ -422,11 +520,26 @@ const Campaign: React.FC<CampaignType> = () => {
                                                                 onClick={
                                                                     () => handlePuterImage(i, sectionKey)
                                                                     } 
-                                                                disabled={loadingImg[key]}
+                                                                disabled={loadingImg[key] || hasUnsavedChanges}
                                                                 sx={{
                                                                     background: theme.colors.textSecondary
                                                                 }}
                                                                 >Generate</Button>
+                                                            <Button
+                                                                variant="contained" 
+                                                                size="small" 
+                                                                onClick={handleSaveChanges} 
+                                                                disabled={loadingImg[key] || !hasUnsavedChanges}
+                                                                sx={{
+                                                                    background: theme.colors.textSecondary
+                                                                }}
+                                                                >{
+                                                                    isUpdatingCampaign
+                                                                    ?
+                                                                    <CircularProgress size={20}/>
+                                                                    :
+                                                                    <SaveIcon />
+                                                                }</Button>
                                                             <input type="file" id={`upload-${key}`} hidden onChange={(e) => handleFileUpload(e, key)} multiple accept="image/*" />
                                                             <label htmlFor={`upload-${key}`}>
                                                                 <Button 
@@ -503,7 +616,9 @@ const Campaign: React.FC<CampaignType> = () => {
                                         }} 
                                     color={theme.colors.text}
                                     >Captions</Typography>
-                                {campaignResult.captions?.map((_: string, i: number) => (
+                                {(campaignResult.captions || [])?.map((_: string, i: number) => {
+                                    const captions = editableContent.captions as string[];
+                                    return (
                                     <Box 
                                         key={i} 
                                         sx={{ mb: 2, 
@@ -525,7 +640,7 @@ const Campaign: React.FC<CampaignType> = () => {
                                                 fullWidth 
                                                 size="small" 
                                                 //editableContent[sectionKey] as string[])[i]
-                                                value={(editableContent.captions as string[])[i]} 
+                                                value={captions[i]} 
                                                 onChange={
                                                     (e) => handleEditChange('captions', i, e.target.value)
                                                 } /> : 
@@ -535,7 +650,7 @@ const Campaign: React.FC<CampaignType> = () => {
                                                     flex: 1
                                                  }} 
                                                  color={theme.colors.text}
-                                                 >{(editableContent.captions as string[])[i]}</Typography>
+                                                 >{captions[i]}</Typography>
                                         }
                                         <Button 
                                             variant="contained" 
@@ -548,7 +663,8 @@ const Campaign: React.FC<CampaignType> = () => {
                                             }}
                                                 >Edit</Button>
                                     </Box>
-                                ))}
+                                    );
+                                })}
 
                                 <Box 
                                     sx={{ 
@@ -565,14 +681,19 @@ const Campaign: React.FC<CampaignType> = () => {
                                         >Reset All Data</Button>
                                     <Button 
                                         variant="contained" 
-                                        fullWidth 
+                                        fullWidth
+                                        disabled={!hasSelections || hasUnsavedChanges} 
                                         onClick={
                                             () => setIsApproved(true)
                                             }
                                         sx={{
-                                            background: theme.colors.textSecondary
+                                            background: theme.colors.textSecondary,
+                                            opacity: hasSelections ? 1 : 0.5,
+                                            cursor: hasSelections ? 'pointer' : 'not-allowed'
                                         }}
-                                            >Approved</Button>
+                                            >
+                                                {hasSelections ? 'Approve & Schedule' : 'Select at least 1 item to proceed'}
+                                            </Button>
                                 </Box>
                             </motion.div>
                         )}
@@ -678,7 +799,13 @@ const Campaign: React.FC<CampaignType> = () => {
                                         }} />
                         </Box>
 
-                        <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>Select Social Platforms</Typography>
+                        <Typography 
+                            variant="h6" 
+                            fontWeight="bold" 
+                            sx={{ 
+                                mb: 3 
+                                }}
+                                >Select Social Platforms</Typography>
                         <Box
                         sx={{
                             display: 'flex',
